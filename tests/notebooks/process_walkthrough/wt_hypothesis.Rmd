@@ -46,13 +46,12 @@ print(pdf_paths)
 ## Process Text
 ```{r}
 # Select Document Index
-n = 16
+n = 40
 input_path <- pdf_paths[n]
 input_path
 cat("\n\n")
-input_text <- process_text(input_path)
-
-inspect(input_text, m = 1, span = 10)
+input_text <- pdf_to_text(input_path)
+processed_text <- process_text(input_text)
 ```
 
 # Extract Hypothesis
@@ -67,7 +66,7 @@ hypothesis_split_tag <- paste(split_tag, hypothesis_tag, sep = "")
 ## Split Lines with multiple hypothesis tags
 ```{r}
 split_text <- stringr::str_split(
-  string  = input_text,
+  string  = processed_text,
   pattern = split_tag) %>%
   unlist()
 
@@ -92,12 +91,6 @@ hypothesis_002
 ```
 
 ## Filter vector elements based on hypothesis prediction model
-
-```{r}
-# hypothesis_003 <- apply_fasttext_model(hypothesis_002)
-# hypothesis_003
-```
-
 
 ```{r}
 apply_model = FALSE
@@ -204,9 +197,7 @@ h_match_num <- h_match[,2]
 h_match_num
 ```
 
-
-
-## Identify unique hypothesis numbers
+## Identify unique hypothesis number/labels
 ```{r}
 # Identify unique hypothesis numbers
 h_match_num_unq <- unique(h_match_num)
@@ -223,11 +214,39 @@ h_match_num_unq <- h_match_num_unq[!is.na(h_match_num_unq)]
 
 h_match_num_unq
 ```
+### Determine Delta between hypothesis numbers
+Drop is delta is greater than 3
+```{r}
+# h_match_num_unq
+# 
+# h_match_num_unq_sort <- sort(as.numeric(h_match_num_unq))
+# 
+# h_match_num_unq_sort
+# 
+# h_num_diff <- diff(as.numeric(h_match_num_unq_sort))
+# 
+# h_num_diff
+# 
+# # Add value to first instance
+# h_num_diff <- c(0, h_num_diff)
+# h_num_diff
+# 
+# h_num_cutoff <- 3
+# 
+# log_h_num_diff <- h_num_diff < h_num_cutoff
+# 
+# log_h_num_diff
+# 
+# h_match_num_unq_sort_drop <- h_match_num_unq_sort[log_h_num_diff]
+```
+
 
 #### Reduce to unique hypothesis
 Drop 4 if 4a was already identified.
 Drop 4a is 4 was already identified.
 ```{r}
+  hypothesis_labels <- h_match_num_unq
+
   hypothesis_labels <- h_match_num_unq
   
   # hypothesis_labels <- c("1", "2a", "2b", "3a", "4", "2", "3", "3b", "1b")  

@@ -7,9 +7,10 @@
 ^\.travis\.yml$
 ^\.github$
 ^inst/extdata/sample_documents$
+^inst/model_development$
 ^tests/notebooks$
 ^README\.Rmd$
 ^.Rprofile\.Rmd$
 ^.Rhistory\.Rmd$
 ^.gitignore\.Rmd$
-
+^data-raw$

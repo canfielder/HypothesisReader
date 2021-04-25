@@ -22,7 +22,6 @@ The purpose of this notebook is to test how to implement the Entity Extraction m
 ```
 
 
-
 ## Assisting Functions
 ```{r}
 #' Inspect Text String
@@ -60,12 +59,9 @@ print(pdf_paths)
 
 # Process Data
 ```{r}
-n = 8
+n = 18
 input_path <- pdf_paths[n]
 input_path
-
-# PDF Miner
-# input_text <- pdfminer$extract_text(input_path)
 
 # Tika
 input_text <- rtika::tika_text(input = input_path)
@@ -74,19 +70,62 @@ input_text <- rtika::tika_text(input = input_path)
 ## Split Raw Text on Newline Characters
 ```{r}
 processing_text <- input_text %>%
-  # stringr::str_split(pattern = "\r\n") %>% 
   stringr::str_split(pattern = "\n") %>% 
   unlist()
 
-inspect(x = processing_text, m = 561, span = 20)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 580, span = 25)
 ```
+
+## Replace Erroneous Characters
+### Working Code
+```{r}
+# # Load internal error and pattern data
+# encoding_errors <- HypothesisReader::encoding_errors
+# replacement_patterns <- HypothesisReader::encoding_replacement
+# 
+# length(encoding_errors)
+# 
+# length(replacement_patterns)
+# 
+# for (i in seq_along(encoding_errors)) {
+# 
+#   # Extract error/pattern
+#   error <- encoding_errors[i]
+#   replacement <- replacement_patterns[i]
+#   
+#   # Replace encoding error with pattern
+#   processing_text <- stringr::str_replace(
+#     string      = processing_text,
+#     pattern     = error,
+#     replacement = replacement
+#   )
+# }
+# 
+# length(processing_text)
+# cat("\n\n")
+# inspect(x = processing_text, m = 580, span = 20)
+```
+
+### Function
+```{r}
+processing_text <- HypothesisReader::fix_encoding_errors(processing_text)
+
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 580, span = 20)
+```
+
 
 ## Trim Whitespace
 ```{r}
 processing_text <- stringr::str_trim(string = processing_text)
 processing_text <- stringr::str_squish(string = processing_text)
 
-# inspect(x = processing_text, m = 450)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 360)
 ```
 
 ## Remove from References/Bibliography
@@ -103,14 +142,38 @@ logical_section <- ifelse(
   yes  = TRUE,
   no   = FALSE)
 
+# logical_section
 
+any(logical_section)
+
+# Check if Section Header is present anywhere in document
 if (any(logical_section)){
-  index <- min(which(logical_section == TRUE))
-  processing_text <- processing_text[1:index-1]
+  
+  # Determine all instances of reference section
+  ref_indexes <- which(logical_section == TRUE)
+  
+  # Determine document index where after reference section is dropped
+  document_length <- length(processing_text)
+  print(document_length)
+  ref_cut_off_percent <- 0.8
+  ref_cut_off_index <- round(document_length * ref_cut_off_percent, 0)
+  print(ref_cut_off_index)
+  print(max(ref_indexes))
+  
+  # Drop reference section, if it occurs after cut off index
+  if (max(ref_indexes) >= ref_cut_off_index) {
+    index <- min(ref_indexes[ref_indexes > ref_cut_off_index])
+    print("Reference section dropped")
+    print(index)
+    processing_text <- processing_text[1:index-1]
+  }
 }
 
 length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 360)
 ```
+
 
 ## Remove Patterns
 ```{r}
@@ -128,8 +191,9 @@ processing_text <- remove_if_detect(
   regex          = regex_letters,
   logical_method = "inverse"
 )
-
-# inspect(x = processing_text, m = 190)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 240)
 ```
 
 ## Drop Vectors With Length 1 or Less
@@ -141,7 +205,9 @@ processing_text <- processing_text[logical_length]
 # Drop any NA elements
 processing_text <- processing_text[!is.na(processing_text)]
 
-# inspect(x = processing_text, m = 190)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 240)
 ```
 
 ## Remove Months
@@ -155,7 +221,9 @@ processing_text <- remove_if_detect(
 ## Drop Any NA Elements
 processing_text <- processing_text[!is.na(processing_text)]
 
-# inspect(x = processing_text, m = 190)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 240)
 ```
 
 ## Concatenate Hyphens
@@ -163,14 +231,16 @@ processing_text <- processing_text[!is.na(processing_text)]
 ## Concatenate Adjacent Elements If Initial Element Ends With Hyphen
 processing_text <- concat_hypen_vector(processing_text)
 
-# inspect(x = processing_text, m = 185)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 185)
 ```
 
 ## Downloaded Files
 ```{r}
 ## Remove elements which contain text related to downloading documents.
 
-download_vec <- c('This content downloaded','http','jsto','DOI','doi')
+download_vec <- c('This content downloaded','http','jsto','DOI','doi', '://')
 
 processing_text <- remove_if_detect(
   input_vector  = processing_text,
@@ -178,7 +248,9 @@ processing_text <- remove_if_detect(
   location      = "any"
 )
 
-# inspect(x = processing_text, m = 185)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 225)
 ```
 
 ## IP Addresses
@@ -191,7 +263,9 @@ processing_text <- remove_if_detect(
   location     = "any"
 )
 
-# inspect(x = processing_text, m = 185)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 235)
 ```
 
 ## Parenthesis
@@ -229,6 +303,8 @@ processing_text <- processing_text[processing_text!=""]
 ## Drop NA elements
 processing_text <- processing_text[!is.na(processing_text)]
 
+length(processing_text)
+cat("\n\n")
 # inspect(x = processing_text, m = 185)
 ```
 
@@ -242,7 +318,9 @@ processing_text <- remove_if_detect(
   logical_method = "inverse"
 )
 
-inspect(x = processing_text, m = 25)
+length(processing_text)
+cat("\n\n")
+# inspect(x = processing_text, m = 25)
 ```
 
 ## Remove Periods Common Abbreviations
@@ -284,6 +362,7 @@ for (abbr in regex_common_abbr) {
     replacement = abbr_no_per
   )
 }
+
 test_output
 ```
 
@@ -291,14 +370,18 @@ test_output
 ```{r}
 processing_text <- remove_period_abbr(processing_text)
 
-inspect(x = processing_text, m = 25, span = 20)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 150, span = 20)
 ```
 
 ## Fix Common Error Traps
 ```{r}
 processing_text <- fix_common_error_traps(processing_text)
 
-inspect(x = processing_text, m = 410, span = 20)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 150, span = 20)
 ```
 
 ## Detect Duplicate Tags
@@ -442,7 +525,9 @@ processing_text <- standardize_hypothesis_proposition(
 ## Drop object names
 processing_text <- unname(processing_text)
 
-inspect(x = processing_text, m = 410)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 150)
 ```
 
 ## Standardize Hypothesis - Non-numbered
@@ -462,88 +547,97 @@ if (n_hypothesis_test == 0) {
     input_vector  = processing_text
   )
 }
+
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 150)
 ```
 
 ## Replace Double Hypothesis Tags
 ### Walkthrough
 ```{r}
-input.str <- processing_text[419]
-
-# Drop Whitespace
-input.str <- stringr::str_squish(input.str)
-
-## Detect Double Tag
-regex_single_tag <- "<split>hypo (.*?):"
-
-regex_double_tag <- paste(
-  regex_single_tag, 
-  "\\s*",
-  regex_single_tag,
-  sep = ""
-)
-
-## Extract Double Tag
-extract_double_tag <- stringr::str_extract(
-  string = input.str, 
-  pattern = regex_double_tag
-  )
-
-extract_double_tag
-
-## Extract Single tags
-extract_single_tag <- stringr::str_extract_all(
-  string = extract_double_tag, 
-  pattern = regex_single_tag
-  )
-
-extract_single_tag <- extract_single_tag %>% unlist()
-
-extract_single_tag
-
-## Extract ta number/label
-
-extract_tag_labels <- extract_single_tag %>% 
-    stringr::str_remove_all(
-      pattern = "<split>hypo ") %>%
-    stringr::str_remove_all(
-      pattern = ":") 
-
-extract_tag_labels
-
-## Check if both labels are the same
-n_unique_labels <- length(unique(extract_tag_labels))
-
-n_unique_labels
-
-## If both labels are the same, remove one
-
-output.str <- input.str %>% 
-  stringr::str_replace_all(
-    pattern = extract_double_tag, 
-    replacement =  extract_single_tag[1]
-    )
-
-output.str
+# input.str <- processing_text[419]
+# 
+# # Drop Whitespace
+# input.str <- stringr::str_squish(input.str)
+# 
+# ## Detect Double Tag
+# regex_single_tag <- "<split>hypo (.*?):"
+# 
+# regex_double_tag <- paste(
+#   regex_single_tag, 
+#   "\\s*",
+#   regex_single_tag,
+#   sep = ""
+# )
+# 
+# ## Extract Double Tag
+# extract_double_tag <- stringr::str_extract(
+#   string = input.str, 
+#   pattern = regex_double_tag
+#   )
+# 
+# extract_double_tag
+# 
+# ## Extract Single tags
+# extract_single_tag <- stringr::str_extract_all(
+#   string = extract_double_tag, 
+#   pattern = regex_single_tag
+#   )
+# 
+# extract_single_tag <- extract_single_tag %>% unlist()
+# 
+# extract_single_tag
+# 
+# ## Extract ta number/label
+# 
+# extract_tag_labels <- extract_single_tag %>% 
+#     stringr::str_remove_all(
+#       pattern = "<split>hypo ") %>%
+#     stringr::str_remove_all(
+#       pattern = ":") 
+# 
+# extract_tag_labels
+# 
+# ## Check if both labels are the same
+# n_unique_labels <- length(unique(extract_tag_labels))
+# 
+# n_unique_labels
+# 
+# ## If both labels are the same, remove one
+# 
+# output.str <- input.str %>% 
+#   stringr::str_replace_all(
+#     pattern = extract_double_tag, 
+#     replacement =  extract_single_tag[1]
+#     )
+# 
+# output.str
+# 
+# length(processing_text)
+# cat("\n\n")
+# inspect(x = processing_text, m = 150)
 
 ```
 
 ```{r}
-input.str
-extract_double_tag
-extract_single_tag
-b <- stringr::str_replace_all(
-  string = input.str, 
-  pattern = extract_double_tag, 
-  replacement =  extract_single_tag[1]
-  )
-b
+# input.str
+# extract_double_tag
+# extract_single_tag
+# b <- stringr::str_replace_all(
+#   string = input.str, 
+#   pattern = extract_double_tag, 
+#   replacement =  extract_single_tag[1]
+#   )
+# b
 ```
 
 ### Function
 ```{r}
 processing_text <- remove_duplicate_tag(processing_text) %>% unname()
-
-inspect(x = processing_text, m = 410)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 150)
 ```
 
 ## Remove Trailing Period
@@ -556,7 +650,9 @@ processing_text <- remove_period(
 ## Drop object names
 processing_text <- unname(processing_text)
 
-inspect(x = processing_text, m = 410, span = 20)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 150)
 ```
 
 ## Tokenize Sentence - First Pass (Tokenizers)
@@ -583,9 +679,9 @@ processing_text <- stringr::str_replace_all(
   pattern     = "  ",
   replacement = " "
 )
-
-inspect(x = processing_text, m = 235, span = 10)
-
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 60, span = 10)
 ```
 
 ## Tokenize Sentence - Second Pass (Stringr)
@@ -598,7 +694,9 @@ processing_text <- stringr::str_split(
 ## Drop empty vectors
 processing_text <- processing_text[processing_text!=""]
 
-inspect(x = processing_text, m = 260, span = 10)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 80, span = 10)
 ```
 
 ## Normalize Case 
@@ -618,7 +716,9 @@ processing_text <- tolower(processing_text)
     location      = "any"
   )
 
-inspect(x = processing_text, m = 260, span = 10)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 80, span = 10)
 ```
 
 ## Symbols and Numbers (Second Time)
@@ -631,14 +731,18 @@ inspect(x = processing_text, m = 260, span = 10)
     logical_method = "inverse"
   )
 
-# inspect(x = processing_text, m = 90 , span = 10)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 75, span = 10)
 ```
 
 ## Split Sentences with Multiple Hypothesis Tags
 ```{r}
 processing_text <- break_out_hypothesis_tags(processing_text)
 
-# inspect(x = processing_text, m = 90 , span = 20)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 75 , span = 10)
 ```
 
 ## Misc Text Replacement
@@ -664,13 +768,21 @@ processing_text <- break_out_hypothesis_tags(processing_text)
   )
   
 
-inspect(x = processing_text, m = 150, span = 10)
+length(processing_text)
+cat("\n\n")
+inspect(x = processing_text, m = 75 , span = 10)
 ```
+
+```{r}
+processing_text
+```
+
 
 # Final Function
 ```{r}
-input_text <- process_text(input_path)
+input_text
+processed_text <- process_text(input_text)
 
-inspect(x = input_text, m = 250, span = 10)
+inspect(x = processed_text, m = 75, span = 10)
 ```
 

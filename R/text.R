@@ -696,6 +696,41 @@ text_conversion_test <- function(input_text) {
 
 }
 
+
+#' Replace text encoding errors with known patterns.
+#'
+#' Erroneous text encoding errors are replaced with known patterns.
+#'
+#' @param input_text Converted text of all input PDF documents
+#' @noRd
+
+fix_encoding_errors <- function(input_text){
+
+  # # Load internal error and pattern data
+  # encoding_errors <- HypothesisReader::encoding_errors
+  # encoding_replacement <- HypothesisReader::encoding_replacement
+  
+  output_text <- input_text
+  
+  for (i in seq_along(encoding_errors)) {
+    
+    # Extract error/pattern
+    error <- encoding_errors[i]
+    replacement <- encoding_replacement[i]
+    
+    # Replace encoding error with pattern
+    output_text <- stringr::str_replace(
+      string      = output_text,
+      pattern     = error,
+      replacement = replacement
+    )
+  }
+  
+  output_text
+  
+}
+
+
 #' Process PDF text
 #'
 #' Wrapper function. Executes all steps in the process flow converting raw
@@ -717,16 +752,20 @@ process_text <- function(text_raw){
   text_processed <- text_raw %>%
     stringr::str_split(pattern = "\n") %>%
     unlist()
+  
+  # Encoding -------------------------------------------------------------------
+  ## Fix encoding errors
+  text_processed <- fix_encoding_errors(text_processed)
 
-  # White -space ---------------------------------------------------------------
+  # White-space ----------------------------------------------------------------
   # Trim excess - outside and inside strings
   text_processed <- stringr::str_trim(string = text_processed)
   text_processed <- stringr::str_squish(string = text_processed)
 
   # References / Bibliography --------------------------------------------------
-  ## Remove any text in DF document which occurs after the Reference/
+  ## Remove any text in PDF document which occurs after the Reference/
   ## Bibliography, if one exists.
-  ### Return Logical Vector
+  ### Return Logical Vector of instances of reference/bibliography 
   logical_section <- ifelse(
     test = (
       tolower(text_processed) == "references" |
@@ -734,12 +773,25 @@ process_text <- function(text_raw){
     ),
     yes  = TRUE,
     no   = FALSE)
-
-  ### Drop elements After first instance of Reference or Bibliography is
-  ### identified.
+  
+  ### Drop elements after first acceptable instance of Reference or 
+  ### Bibliography is identified. Reference / Bibliography section headers 
+  ### in the beginning of the document are ignored.
   if (any(logical_section)){
-    index <- min(which(logical_section == TRUE))
-    text_processed <- text_processed[1:index-1]
+    
+    # Determine all instances of reference section
+    ref_indexes <- which(logical_section == TRUE)
+    
+    # Determine document index after which, reference section is dropped
+    document_length <- length(text_processed)
+    ref_cut_off_percent <- 0.75
+    ref_cut_off_index <- round(document_length * ref_cut_off_percent, 0)
+    
+    # Drop reference section, if it occurs after cut off index
+    if (max(ref_indexes) >= ref_cut_off_index) {
+      index <- min(ref_indexes[ref_indexes > ref_cut_off_index])
+      text_processed <- text_processed[1:index-1]
+    }
   }
 
   # Numbers and Symbols --------------------------------------------------------
@@ -769,14 +821,10 @@ process_text <- function(text_raw){
   ## Drop any NA elements
   text_processed <- text_processed[!is.na(text_processed)]
 
-  # Hyphen Concatenation -------------------------------------------------------
-  ## Concatenate adjacent elements if initial element ends With hyphen
-  text_processed <- concat_hypen_vector(text_processed)
-
   # Downloading ----------------------------------------------------------------
   ## Remove elements which contain text related to downloading documents.
 
-  download_vec <- c('This content downloaded','http','jsto','DOI','doi')
+  download_vec <- c('This content downloaded','http','jsto','DOI','doi', '://')
 
   text_processed <- remove_if_detect(
     input_vector  = text_processed,
@@ -792,6 +840,10 @@ process_text <- function(text_raw){
     regex        = regex_ip,
     location     = "any"
   )
+  
+  # Hyphen Concatenation -------------------------------------------------------
+  ## Concatenate adjacent elements if initial element ends With hyphen
+  text_processed <- concat_hypen_vector(text_processed)
 
   # # Parenthesis ----------------------------------------------------------------
   # ## Remove text within parenthesis
