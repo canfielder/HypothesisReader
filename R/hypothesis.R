@@ -16,6 +16,8 @@ ft_model <- fastTextR::ft_load(get_path_ft_model())
 split_tag <- "<split>"
 hypothesis_tag <- "hypo (.*?):\\s*"
 hypothesis_split_tag <- paste(split_tag, hypothesis_tag, sep = "")
+regex_non_numeric <- "[^0-9.-]"
+regex_return_num <- "(\\d)+"
 
 # Functions -------------------------------------------------------------------
 
@@ -41,7 +43,6 @@ gen_fasttext_model_input <- function(input_text) {
   output_text
 
 }
-
 
 
 #' Filter hypothesis statements with fastText classification model
@@ -81,7 +82,6 @@ apply_fasttext_model <- function(input_text) {
   }
 
   # Generate logical vector indicting if a vector element is a hypothesis
-
   col_names <- names(hypothesis_pred)
 
   ## If no column not found, all elements are hypothesis
@@ -119,20 +119,36 @@ apply_fasttext_model <- function(input_text) {
 }
 
 
-#' Reduce to unique hypothesis labels
+#' Reduce to acceptable hypothesis labels
 #'
-#' Reduces the list of identified hypotheses to unique labels. This also
-#' includes dropping any numeric hypothesis label where an alphanumeric label
-#' with the same number has appeared earlier in the document, i.e.: If
-#' Hypothesis 1 appears after Hypothesis 1a, Hypothesis 1 is removed
+#' Reduces the list of identified hypotheses to unique labels. For this 
+#' process, we have a specific logic to determine if a label is unique when
+#' dealing with both numeric and alpha-numeric labels. 
+#' 
+#' When the first instance of a hypothesis number occurs in an alpha-numeric
+#' label (the number 1 in Hypothesis 1a), then subsequent uses of that
+#' number that are strictly numeric (Hypothesis 1) ARE NOT allowed. But, when
+#' the first instance of a hypothesis number occurs in a numeric label
+#' (the number 1 in Hypothesis 1), then subsequent uses of that
+#' number that are alphanumeric (Hypothesis 1a) ARE allowed. 
+#' 
+#' For example, the following list of hypothesis labels are allowed:
+#'  - Hypothesis 1      ALLOWED
+#'  - Hypothesis 1a     ALLOWED
+#'  - Hypothesis 1b     ALLOWED
+#'  
+#' However, the following list of hypothesis contains labels that are not 
+#' allowed, and would therefore be dropped.
+#'  - Hypothesis 1a     ALLOWED
+#'  - Hypothesis 1      NOT ALLOWED
+#'  - Hypothesis 1b     ALLOWED
+#' 
 #'
 #' @param hypothesis_labels Vector of identified hypothesis labels
 #' @noRd
 
-unique_hypothesis_labels <- function(hypothesis_labels) {
+acceptable_hypothesis_labels <- function(hypothesis_labels) {
   h_id <- hypothesis <- NULL
-
-  regex_return_num <- "(\\d)+"
 
   hypothesis_numbers <- stringr::str_extract(
     string = hypothesis_labels,
@@ -140,34 +156,40 @@ unique_hypothesis_labels <- function(hypothesis_labels) {
   )
 
   # Check if hypothesis label contains letters
-  log_hypothesis_labels_alpha <- grepl("[a-zA-Z]", hypothesis_labels)
+  logical_hypothesis_labels_alpha <- grepl("[a-zA-Z]", hypothesis_labels)
 
   # Initialize
   h_num_output <- c()
   h_label_output <- c()
 
-  for (i in seq_along(log_hypothesis_labels_alpha)) {
+  for (i in seq_along(logical_hypothesis_labels_alpha)) {
 
     # Extract values at index i
-    h_label_alpha <- log_hypothesis_labels_alpha[i]
+    h_label_alpha <- logical_hypothesis_labels_alpha[i]
     h_num <- hypothesis_numbers[i]
     h_label <- hypothesis_labels[i]
 
     # If label contains a letter
     if (h_label_alpha) {
 
-      # Check if number already used in label
-      if (!(h_num %in% h_label_output)) {
-
-        h_label_output <- c(h_label_output, h_label)
-        h_num_output <- c(h_num_output, h_num)
-
-      }
+      # # Check if number already used in label
+      # if (!(h_num %in% h_label_output)) {
+      # 
+      #   h_label_output <- c(h_label_output, h_label)
+      #   h_num_output <- c(h_num_output, h_num)
+      # 
+      # }
+      
+      # Append to output vectors
+      h_label_output <- c(h_label_output, h_label)
+      h_num_output <- c(h_num_output, h_num)
 
     } else {
 
       if (!(h_num %in% h_num_output)) {
-
+        
+        # Append to output if number has not already
+        # used in alphanumeric label
         h_label_output <- c(h_label_output, h_label)
         h_num_output <- c(h_num_output, h_num)
 
@@ -247,6 +269,147 @@ drop_hypothesis_below_min_threshold <- function(
 }
 
 
+#' Remove hypothesis statements with unreasonably large label numbers.
+#'
+#' Hypothesis number sanity check. Some false hypothesis identifications
+#' result in numbers far larger than the true hypothesis labels. This 
+#' function removes hypothesis labels that are larger than one could
+#' reasonably expect.
+#'
+#' @param input_hypothesis hypothesis statements, character vector
+#' @param threshold maximum difference allowable between consecutive 
+#'  hypothesis numbers
+#' @noRd
+
+hypothesis_sanity_check <- function(
+  input_hypothesis,
+  threshold = 3
+  ) {
+  # Generate vector of all hypothesis labels
+  h_label <- input_hypothesis %>%
+    stringr::str_match(
+      pattern = hypothesis_tag
+    )
+  h_label <- h_label[,2]
+
+  # Extract hypothesis label numbers 
+  h_num <- gsub(
+    pattern = regex_non_numeric, 
+    replacement =  "",
+    x =  h_label
+  ) %>% as.numeric()
+  
+  # Sort ascending, then append zero
+  ## Adding zero is for offsetting the diff function, which will reduce our
+  ## vector length from n to n-1.
+  h_num_ascend <- sort(h_num)
+  h_num_ascend_app_0 <- c(0, h_num_ascend)
+  
+  # Determine difference between next closest hypothesis number
+  h_num_diff <- diff(h_num_ascend_app_0)
+  
+  # Check if any differences exceed threshold
+  logical_h_num_sanity <- h_num_diff > threshold
+  
+  if (any(logical_h_num_sanity)) {
+    
+    # Determine index of first instance of exceeding threshold
+    index_cutoff <- min(which(logical_h_num_sanity))
+    
+    # Determine hypothesis number at first index
+    value_cutoff <- h_num_ascend[index_cutoff]
+    
+    # Filter hypothesis labels
+    input_hypothesis[h_num < value_cutoff] 
+    
+  } else {
+    
+    input_hypothesis
+    
+  }
+}
+
+
+#' Format hypothesis output table
+#'
+#' Creates the output table for hypothesis statements
+#'
+#' @param input_hypothesis hypothesis statements, character vector
+#' @noRd
+
+hypothesis_output_table <- function(input_hypothesis) {
+  
+  # Extract hypothesis label/number
+  h_id <- input_hypothesis %>%
+    stringr::str_extract("hypo (.*?):") %>%
+    stringr::str_remove_all("hypo ") %>%
+    stringr::str_remove_all(":")
+  
+  # Drop ~Hypo #:~ for entity extraction input
+  hypothesis <- gsub(
+    pattern     = hypothesis_tag,
+    replacement = "",
+    x           =  input_hypothesis
+  )
+  
+  # Create Dataframe with hypothesis number and hypothesis
+  df_hypothesis <- data.frame(
+    h_id,
+    hypothesis,
+    stringsAsFactors = FALSE
+  )
+  
+  # Rename and add hypothesis Number
+  df_hypothesis <- df_hypothesis %>%
+    dplyr::mutate(
+      h_id = paste0("h_", h_id)
+    ) %>%
+    dplyr::select(h_id, hypothesis)
+  
+  df_hypothesis
+}
+
+
+#' Format hypothesis output table
+#'
+#' Creates the output table for hypothesis statements
+#'
+#' @param input_hypothesis hypothesis statements, character vector
+#' @noRd
+
+hypothesis_output_table <- function(input_hypothesis) {
+  
+  # Extract hypothesis label/number
+  h_id <- input_hypothesis %>%
+    stringr::str_extract("hypo (.*?):") %>%
+    stringr::str_remove_all("hypo ") %>%
+    stringr::str_remove_all(":")
+  
+  # Drop ~Hypo #:~ for entity extraction input
+  hypothesis <- gsub(
+    pattern     = hypothesis_tag,
+    replacement = "",
+    x           =  input_hypothesis
+  )
+  
+  # Create Dataframe with hypothesis number and hypothesis
+  df_hypothesis <- data.frame(
+    h_id,
+    hypothesis,
+    stringsAsFactors = FALSE
+  )
+  
+  # Rename and add hypothesis Number
+  df_hypothesis <- df_hypothesis %>%
+    dplyr::mutate(
+      h_id = paste0("h_", h_id)
+    ) %>%
+    dplyr::select(h_id, hypothesis)
+  
+  df_hypothesis
+}
+  
+  
 #' Extract hypothesis statements
 #'
 #' Wrapper function. Executes all steps in the hypothesis extraction process.
@@ -268,16 +431,17 @@ hypothesis_extraction <- function(input_text, apply_model = FALSE){
     unlist()
 
   # Select vector elements which contain hypothesis tags
-  log_hypothesis_tag <- stringr::str_detect(
+  logical_hypothesis_tag <- stringr::str_detect(
     string  = split_text,
     pattern = hypothesis_tag
   )
 
-  hypothesis <- split_text[log_hypothesis_tag]
+  hypothesis <- split_text[logical_hypothesis_tag]
 
-  # Remove vector elements with token counts below minimum threshold
+  # Minimum Token Threshold ----------------------------------------------------
   hypothesis <- drop_hypothesis_below_min_threshold(hypothesis)
 
+  # fastText -------------------------------------------------------------------
   # Filter vector elements based on hypothesis prediction model
   if (apply_model) {
     if (!(purrr::is_empty(hypothesis))) {
@@ -286,75 +450,52 @@ hypothesis_extraction <- function(input_text, apply_model = FALSE){
 
     }
   }
+  
+  # Sanity Check ---------------------------------------------------------------
+  hypothesis <- hypothesis_sanity_check(hypothesis)
 
-  # Extract hypotheses label/number
+  # Unique Hypothesis Labels ---------------------------------------------------
+  ## Extract hypotheses label/number
   h_match <- hypothesis %>%
     stringr::str_match(
       pattern = hypothesis_tag
     )
 
-  h_match_num <- h_match[,2]
+  h_match_lbl <- h_match[,2]
 
-  # Identify unique hypothesis numbers
-  h_match_num_unq <- unique(h_match_num)
+  ## Identify unique hypothesis labels
+  h_match_lbl_unq <- unique(h_match_lbl)
 
-  # Remove known erroneous hypothesis formats
+  ## Remove known erroneous hypothesis formats
   error_hypothesis <- c("na")
-  h_match_num_unq <- setdiff(h_match_num_unq, error_hypothesis)
+  h_match_lbl_unq <- setdiff(h_match_lbl_unq, error_hypothesis)
+  h_match_lbl_unq <- h_match_lbl_unq[!is.na(h_match_lbl_unq)]
 
-  # Drop NA
-  h_match_num_unq <- h_match_num_unq[!is.na(h_match_num_unq)]
+  # Acceptable Hypothesis Labels -----------------------------------------------
+  ### i.e.: Hypothesis 1 not selected if Hypothesis 1a appears earlier
+  h_match_lbl_unq <- acceptable_hypothesis_labels(h_match_lbl_unq)
 
-  # Determine unique hypothesis label/numbers
-  ## i.e.: Hypothesis 1 not selected if Hypothesis 1a appears earlier
-  h_match_num_unq <- unique_hypothesis_labels(h_match_num_unq)
-
-
-  # Determine vector index of initial hypothesis statements
+  # Initial Instance -----------------------------------------------------------
+  ## Determine vector index of initial hypothesis statements
   h_initial <- c()
 
-  for (i in h_match_num_unq){
+  for (i in h_match_lbl_unq){
 
     intial_idx <- tapply(
-      X     = seq_along(h_match_num),
-      INDEX = h_match_num,
+      X     = seq_along(h_match_lbl),
+      INDEX = h_match_lbl,
       FUN   = min
       )[i]
 
     h_initial <- c(h_initial, intial_idx)
   }
 
-  # Reduce to only initial hypothesis instances
+  ## Reduce to only initial hypothesis instances
   hypothesis <- hypothesis[h_initial]
 
   # Create Output Table -------------------------------------------------------
-  # Extract hypothesis label/number
-  h_id <- hypothesis %>%
-    stringr::str_extract("hypo (.*?):") %>%
-    stringr::str_remove_all("hypo ") %>%
-    stringr::str_remove_all(":")
-
-  # Drop ~Hypo #:~ for entity extraction input
-  hypothesis <- gsub(
-    pattern     = hypothesis_tag,
-    replacement = "",
-    x           =  hypothesis
-    )
-
-  # Create Dataframe with hypothesis number and hypothesis
-  df_hypothesis <- data.frame(
-    h_id,
-    hypothesis,
-    stringsAsFactors = FALSE
-  )
-
-  # Rename and add Hypothesis Number
-  df_hypothesis <- df_hypothesis %>%
-    dplyr::mutate(
-      h_id = paste0("h_", h_id)
-    ) %>%
-    dplyr::select(h_id, hypothesis)
-
+  df_hypothesis <- hypothesis_output_table(hypothesis)
+  
   df_hypothesis
 
 }

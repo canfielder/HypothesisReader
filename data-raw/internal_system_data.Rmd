@@ -1,0 +1,97 @@
+---
+title: "Enncoding Error Table"
+author: "Evan Canfield"
+date: "4/25/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Purpose
+The following notebook defines data which will be used interally to the package and stored in the R/sysdata.RDA file.
+
+# Import
+```{r import_packages}
+if (!require(pacman)) {install.packages('pacman')}
+
+p_load(
+  dplyr
+)
+```
+
+# Issue
+## Encoding Errors
+The PDF to text conversion sometimes results in text encoding errors. This means standard text characters are misinterpreted, and are then replaced with a different character, or a different string of characters. To fix this issue, we will document known errors, both the erronious character strings, the what these characters strings represent. We will use these two vectors to replace known encoding errors with the correct intended characters.
+
+```{r encoding}
+# Define known encoding errors
+encoding_pattern <- c(
+  "â€™", 
+  "â€™s",
+  "鈥檚", 
+  "鈥�", 
+  "â¼", 
+  "录", 
+  "perf01â€™1\\)lailcâ€™p", 
+  "perf01鈥�1\\)lailc鈥橮",
+  "â€œ",
+  "â€\u009d",
+  'â€“',
+  "&mdash",
+  "&dquo;",
+  "Ð—Ð°", 
+  "ï¿½ ",
+  "锟� ",
+  "fi rms"
+)
+
+# Define replacement patterns for encoding errors
+encoding_replacement <- c(
+  "'",  
+  "'s", 
+  "'s", 
+  "'", 
+  "=", 
+  "=",
+  "performance", 
+  "performance",
+  '"',
+  '"',
+  "-",
+  "-",
+  " ",
+  "3a",
+  "fi"
+)
+```
+
+## Italics Conversion
+In the PDF to text conversion, italicized words can be misinterpreted. A common issue is the number 1 being converted into the letter I or L. This is a problem for extracting hypotheses when the number in Hypothesis 1 is interpreted as a letter. This means the process for identifying hypotheses misses Hypothesis 1. 
+
+To prevent this, we will define known erroneous PDF conversions, and in turn the correct intended text. We will then replace the incorrectly converted text to the correct text. These definitions must be very stringent and specific. If they become too general we risk converting text that was not a conversion error.
+
+```{r italics}
+italics.df <- read.csv(
+  file = "./italic_conversion_error_table.csv", 
+  fileEncoding="UTF-8-BOM"
+  )
+
+italics_pattern <- italics.df %>% dplyr::pull(pattern)
+italics_replacement <- italics.df %>% dplyr::pull(replacement)
+```
+
+# Export
+```{r}
+# Save to System Data
+usethis::use_data(
+  encoding_pattern,
+  encoding_replacement,
+  italics_pattern, 
+  italics_replacement,
+  internal  = TRUE,
+  overwrite = TRUE
+  )
+```
+

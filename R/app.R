@@ -149,7 +149,8 @@ server <- function(input, output) {
   }, options =
     list(
       searching = FALSE,
-      paging = FALSE,
+      # paging = FALSE,
+      pageLength = 20,
       language = list(
         emptyTable = empty_table
         )
@@ -201,9 +202,24 @@ server <- function(input, output) {
   # --- Download ---------------------------------------------------------------
   output$download_table <- shiny::downloadHandler(
     filename = function() {
+      
+      # Create time-stamp
+      time <- as.character(Sys.time())
+      time <- gsub(
+        pattern     = " ", 
+        replacement = "_", 
+        x           = time
+        )
+      
+      time <- gsub(
+        pattern     = ":", 
+        replacement = "-", 
+        x           = time
+      )
+      
       paste(
         "hypothesis_reader_",
-        Sys.Date(),
+        time,
         ".csv",
         sep = ""
       )

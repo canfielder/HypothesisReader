@@ -41,6 +41,15 @@ regex_double_tag <- paste(
 ## Identify Numbers
 regex_return_num <- "(\\d)+"
 
+## Months - exact match
+months <- c(month.abb,month.name) 
+months_exact <- paste0("^",months,"$")
+regex_months_exact = paste(tolower(months_exact), collapse="|")
+
+# Line and page break tags
+line_break_tag <- "<line_break>"
+page_break_tag <- "<page_break>"
+
 # Functions --------------------------------------------------------------------
 #' Convert PDF to text
 #'
@@ -700,22 +709,21 @@ text_conversion_test <- function(input_text) {
 #' Replace text encoding errors with known patterns.
 #'
 #' Erroneous text encoding errors are replaced with known patterns.
+#' 
+#' Look-up and replacement strings are defined in the file 
+#' **internal_system_data.RMD** found in the **/data-raw** folder
 #'
 #' @param input_text Converted text of all input PDF documents
 #' @noRd
 
 fix_encoding_errors <- function(input_text){
 
-  # # Load internal error and pattern data
-  # encoding_errors <- HypothesisReader::encoding_errors
-  # encoding_replacement <- HypothesisReader::encoding_replacement
-  
   output_text <- input_text
   
-  for (i in seq_along(encoding_errors)) {
+  for (i in seq_along(encoding_pattern)) {
     
     # Extract error/pattern
-    error <- encoding_errors[i]
+    error <- encoding_pattern[i]
     replacement <- encoding_replacement[i]
     
     # Replace encoding error with pattern
@@ -728,6 +736,262 @@ fix_encoding_errors <- function(input_text){
   
   output_text
   
+}
+
+
+#' Normalize known terms which are known to cause problems in hypothesis
+#'  extraction
+#'
+#' Certain terms lead to sentences being falsely identified as hypotheses
+#' (such as H1B Visa, which will be tagged as Hypothesis 1B). Other terms 
+#' cause different issues which lead to poor hypothesis identification and 
+#' extraction. This function normalizes these terms to prevent an error, 
+#' and can then be used to revert the normalization.
+#'
+#' @param input_text Converted text of all input PDF documents
+#' @param normalize Boolean indicating whether to normalize the input text,
+#'  or whether to revert the normalization of the input text. 
+#' @noRd
+
+tricky_terms <- function(input_text, normalize) {
+  
+  # Define terms
+  tricky_terms <- c("H1B Visa", "H1B visa", "€")
+  tricky_terms_normal <- c("<visa>", "<visa>", "<euro_symbol>")
+  
+  
+  if(normalize) {
+    search_terms <- tricky_terms
+    replacement_patterns <- tricky_terms_normal
+  } else {
+    search_terms <- tricky_terms_normal
+    replacement_patterns <- tricky_terms
+  }
+  
+  output_text <- input_text
+  
+  for (i in seq_along(search_terms)) {
+    # Extract error/pattern
+    pattern <- search_terms[i]
+    replacement <- replacement_patterns[i]
+    
+    # Replace encoding error with pattern
+    output_text <- stringr::str_replace(
+      string      = output_text,
+      pattern     = pattern,
+      replacement = replacement
+    )
+  }
+  
+  output_text
+}
+
+
+#' Correct PDF to text conversion errors due to italics
+#'
+#' The conversion for PDF to text sometimes has problems converting
+#' italicized text. Italicizes 1s are often labeled as Is. This 
+#' function converts a series of known possible errors due to this
+#' conversion issue. 
+#' 
+#' Look-up and replacement strings are defined in the file 
+#' **internal_system_data.RMD** found in the **/data-raw** folder.
+#'
+#' @param input_text Converted text of all input PDF documents
+#' @noRd
+
+fix_italics_conversion_error <- function(input_text) {
+  
+  output_text <- input_text
+  
+  for (i in seq_along(italics_pattern)) {
+    # Extract error/pattern
+    pattern <- italics_pattern[i]
+    replacement <- italics_replacement[i]
+    
+    # Replace encoding error with pattern
+    output_text <- stringr::str_replace(
+      string      = output_text,
+      pattern     = pattern,
+      replacement = replacement
+    )
+  }
+  
+  output_text
+}
+
+
+#' Remove all text from References / Bibliography section to the end of
+#'  of the document.
+#'
+#' Drops all text from where a References/Bibliography section is 
+#' identified, to the end of the document. This function does not perform this
+#' action if the section is identified early in the document.
+#'
+#' @param input_text Converted text of all input PDF documents
+#' @noRd
+
+drop_reference_section <- function(input_text){
+  
+  ### Return Logical Vector of instances of reference/bibliography 
+  logical_section <- ifelse(
+    test = (
+      tolower(input_text) == "references" |
+        tolower(input_text) == "bibliography"
+    ),
+    yes  = TRUE,
+    no   = FALSE
+    )
+
+  ### Drop elements after first acceptable instance of Reference or 
+  ### Bibliography is identified. Reference / Bibliography section headers 
+  ### in the beginning of the document are ignored.
+  if (any(logical_section)){
+    
+    # Determine all instances of reference section
+    ref_indexes <- which(logical_section == TRUE)
+    
+    # Determine document index after which, reference section is dropped
+    document_length <- length(input_text)
+    ref_cut_off_percent <- 0.667
+    ref_cut_off_index <- round(document_length * ref_cut_off_percent, 0)
+    
+    # Drop reference section, if it occurs after cut off index
+    if (max(ref_indexes) >= ref_cut_off_index) {
+      index <- min(ref_indexes[ref_indexes > ref_cut_off_index])
+      
+      input_text[1:index-1]
+      
+  } else {
+    
+    input_text
+    }
+  }
+}
+
+
+#' Remove text within parentheses
+#'
+#' Remove all text within parentheses.
+#'
+#' @param input_text Converted text of all input PDF documents
+#' @noRd
+
+remove_text_parens <- function(input_text){
+  ## Remove text within parenthesis
+  ### Define term to identify line splits
+  line_split_indicator <- " -LINESPLIT-"
+
+  ### Concatenate all vector elements, separated by line split
+  processed_text <- stringr::str_c(
+    input_text,
+    collapse = line_split_indicator
+  )
+
+  # Remove content within parenthesis
+  processed_text <- stringr::str_remove_all(
+    string  = processed_text,
+    pattern = regex_parens
+  )
+
+  # Split single string back into character vectors
+  output_text <- stringr::str_split(
+    string  = processed_text,
+    pattern = line_split_indicator) %>%
+    unlist()
+  
+  output_text
+  
+}
+
+
+#' Remove lines that are either months or months and numbers
+#'
+#' Removes lines where the only values in the character vector element are
+#' month names and numbers. This removes cases commonly associated with
+#' dates referenced as well as page header/footers, whcih are often a date, or
+#' just month, and a page number. 
+#'
+#' @param input_text Converted text of all input PDF documents
+#' @noRd
+
+remove_month_vectors <- function(input_text){
+  
+  # Remove all digits and whitespace
+  processed_text <- gsub('[0-9]+', '', input_text)
+  processed_text <- stringr::str_trim(string = processed_text)
+  processed_text <- stringr::str_squish(string = processed_text)
+  
+  # Create logical vector identifying elements that are only months
+  logical_month <- grepl(regex_months_exact, tolower(processed_text))
+  
+  # Drop vector elements identified as only being months
+  input_text[!logical_month]
+  
+}
+
+
+#' Label line and page breaks
+#'
+#' Identifies line breaks and page breaks. Page breaks are identified as
+#' multiple consecutive instances (of any length greater than 1) of 
+#' "<line_break>" tags, which are generated in the [process_text()] function.
+#'  Line breaks are instances where the tag only occurs once. 
+#'
+#'
+#' @param input_text Converted text of all input PDF documents
+#' @noRd
+
+page_line_break_identification <- function(input_text){
+
+  # Initialize
+  output_vector <- vector(mode = "character")
+  vector_length <- length(input_text)
+  x <- 1
+  i <- 1
+
+  while (x <= vector_length - 1) {
+
+    if (input_text[x] == line_break_tag) {
+      y <- 0
+      sub_vector <- input_text[x:vector_length]
+
+      # Search for recurring line break tags
+      for (j in seq_along(sub_vector)) {
+
+        # Line break tag found
+        if (sub_vector[j] == line_break_tag) {
+          y <- y + 1
+
+        # Line break tag not found
+        } else {
+          if (y > 1) {
+            # Multiple repeating instances - Page Break
+            output_vector <- append(output_vector, page_break_tag)
+
+          } else {
+            # Single instance - Line Break
+            output_vector <- append(output_vector, line_break_tag)
+          }
+          x <- x + y
+          break
+
+        }
+      }
+    } else {
+      output_vector <- append(output_vector, input_text[x])
+      x <- x + 1
+
+    }
+    # Escape Valve
+    i <- i + 1
+    if (i >= vector_length) {
+      x <- vector_length
+    }
+    
+  }
+
+  output_vector
 }
 
 
@@ -753,46 +1017,39 @@ process_text <- function(text_raw){
     stringr::str_split(pattern = "\n") %>%
     unlist()
   
+  # Italics -------------------------------------------------------------------
+  ## Fix conversion error in italics text
+  text_processed <- fix_italics_conversion_error(text_processed)
+  
   # Encoding -------------------------------------------------------------------
   ## Fix encoding errors
   text_processed <- fix_encoding_errors(text_processed)
+  
+  # Tricky Terms - Normalize ---------------------------------------------------
+  ## Must occur after encoding fixes.
+  text_processed <- tricky_terms(
+    input_text = text_processed,
+    normalize = TRUE
+    )
 
-  # White-space ----------------------------------------------------------------
+  # White Space ----------------------------------------------------------------
   # Trim excess - outside and inside strings
   text_processed <- stringr::str_trim(string = text_processed)
   text_processed <- stringr::str_squish(string = text_processed)
-
-  # References / Bibliography --------------------------------------------------
-  ## Remove any text in PDF document which occurs after the Reference/
-  ## Bibliography, if one exists.
-  ### Return Logical Vector of instances of reference/bibliography 
-  logical_section <- ifelse(
-    test = (
-      tolower(text_processed) == "references" |
-      tolower(text_processed) == "bibliography"
-    ),
-    yes  = TRUE,
-    no   = FALSE)
   
-  ### Drop elements after first acceptable instance of Reference or 
-  ### Bibliography is identified. Reference / Bibliography section headers 
-  ### in the beginning of the document are ignored.
-  if (any(logical_section)){
-    
-    # Determine all instances of reference section
-    ref_indexes <- which(logical_section == TRUE)
-    
-    # Determine document index after which, reference section is dropped
-    document_length <- length(text_processed)
-    ref_cut_off_percent <- 0.75
-    ref_cut_off_index <- round(document_length * ref_cut_off_percent, 0)
-    
-    # Drop reference section, if it occurs after cut off index
-    if (max(ref_indexes) >= ref_cut_off_index) {
-      index <- min(ref_indexes[ref_indexes > ref_cut_off_index])
-      text_processed <- text_processed[1:index-1]
-    }
-  }
+  
+  # Empty Vector Normalization -------------------------------------------------
+  logical_empty <- text_processed == ""
+  
+  # Replace empty character vector elements with normalized tag
+  text_processed <- replace(
+    x = text_processed, 
+    list = logical_empty, 
+    values = line_break_tag
+  )
+  
+  # References / Bibliography --------------------------------------------------
+  text_processed <- drop_reference_section(text_processed)
 
   # Numbers and Symbols --------------------------------------------------------
   ## Drop lines with only numbers or symbols
@@ -802,29 +1059,25 @@ process_text <- function(text_raw){
     logical_method = "inverse"
   )
 
-  # n < 1 ----------------------------------------------------------------------
-  ## Drop elements with length of 1 or less
-  logical_length <- nchar(text_processed) > 1
+  # n == 1 ---------------------------------------------------------------------
+  ## Drop elements with length of 1 character
+  logical_length <- nchar(text_processed) != 1
   text_processed <- text_processed[logical_length]
 
+  # NA ------------------------------------------------------------------------
   # Drop any NA elements
   text_processed <- text_processed[!is.na(text_processed)]
 
   # Months ---------------------------------------------------------------------
-  ## Remove elements which start with a month
-  text_processed <- remove_if_detect(
-    input_vector  = text_processed,
-    remove_string = toupper(month.name),
-    location      = "start"
-  )
-
-  ## Drop any NA elements
-  text_processed <- text_processed[!is.na(text_processed)]
+  ## Remove elements which are only months
+  text_processed <- remove_month_vectors(text_processed)
 
   # Downloading ----------------------------------------------------------------
   ## Remove elements which contain text related to downloading documents.
 
-  download_vec <- c('This content downloaded','http','jsto','DOI','doi', '://')
+  download_vec <- c(
+    'This content downloaded','http','jsto', 'JSTOR','DOI','doi', '://'
+    )
 
   text_processed <- remove_if_detect(
     input_vector  = text_processed,
@@ -841,47 +1094,25 @@ process_text <- function(text_raw){
     location     = "any"
   )
   
+  # Line / Page Breaks --------------------------------------------------------
+  ## Identify line and page breaks
+  text_processed <- page_line_break_identification(text_processed)
+  
+  ## Drop page breaks
+  text_processed <- text_processed[text_processed != page_break_tag]
+  
+  ## Drop line breaks
+  ### Trade-off with tokenizing on line break. Dropping all line break vectors
+  ### will mean they cannot be used to tokenize
+  text_processed <- text_processed[text_processed != line_break_tag]
+  
   # Hyphen Concatenation -------------------------------------------------------
   ## Concatenate adjacent elements if initial element ends With hyphen
   text_processed <- concat_hypen_vector(text_processed)
 
-  # # Parenthesis ----------------------------------------------------------------
-  # ## Remove text within parenthesis
-  # ### Define term to identify line splits
-  # line_split_indicator <- " -LINESPLIT-"
-  #
-  # ### Concatenate all vector elements, separated by line split
-  # text_processed <- stringr::str_c(
-  #   text_processed,
-  #   collapse = line_split_indicator
-  # )
-  #
-  # # Remove content within parenthesis
-  # text_processed <- stringr::str_remove_all(
-  #   string  = text_processed,
-  #   pattern = regex_parens
-  # )
-  #
-  # # Split single string back into character vectors
-  # text_processed <- stringr::str_split(
-  #   string  = text_processed,
-  #   pattern = line_split_indicator) %>%
-  #   unlist()
-
-  # Empty Vectors --------------------------------------------------------------
-  ## Drop empty vectors
-  text_processed <- text_processed[text_processed!=""]
-
-  ## Drop NA elements
-  text_processed <- text_processed[!is.na(text_processed)]
-
-  # Numbers and Symbols (Second Time) ------------------------------------------
-  ## Drop lines with only numbers or symbols
-  text_processed <- remove_if_detect(
-    input_vector   = text_processed,
-    regex          = regex_letters,
-    logical_method = "inverse"
-  )
+  # Parentheses ----------------------------------------------------------------
+  ## Remove text within parentheses
+  # text_processed <- remove_text_parens(text_processed)
 
   # Common Issues --------------------------------------------------------------
   ## Remove Periods From Common Abbreviations
@@ -917,13 +1148,19 @@ process_text <- function(text_raw){
     input.str = text_processed
   )
 
-  # Remove trailing period for standardizes hypothesis tags
+  # Remove trailing period for standardized hypothesis tags
   text_processed <- remove_period(
     input.str = text_processed
   )
+  
+  # Tricky Terms - Revert -----------------------------------------------------
+  text_processed <- tricky_terms(
+    input_text = text_processed,
+    normalize = FALSE
+  )
 
   # Tokenize Sentences ---------------------------------------------------------
-  ## Pass 1 - Tokenizers
+  ## Pass 1 - Tokenizers - Sentence
   text_processed <- stringr::str_c(
     text_processed,
     collapse = " "
@@ -933,11 +1170,19 @@ process_text <- function(text_raw){
     text_processed,
     strip_punct = FALSE) %>%
     unlist()
+  
+  ## Pass 2 - Tokenizers - Regex (Line break)
+  
+  text_processed <- tokenizers::tokenize_regex(
+    text_processed,
+    pattern = line_break_tag
+  ) %>%
+    unlist()
 
-  ## Pass 2 - Stringr
+  ## Pass 3 - Stringr
   ### Instances of sentences not being correctly tokenized have been seen
   ### using the Tokenizer method. This additional sentence tokenization step
-  ### has been added to compensate
+  ### has been added to compensate.
   text_processed <- stringr::str_split(
     string  = text_processed,
     pattern = "\\.") %>%
@@ -945,36 +1190,18 @@ process_text <- function(text_raw){
 
   ## Drop empty vectors
   text_processed <- text_processed[text_processed!=""]
+  text_processed <- text_processed[text_processed!=" "]
 
-
-  ## Replace double spaces with single
-  text_processed <- stringr::str_replace_all(
-    string      = text_processed,
-    pattern     = "  ",
-    replacement = " "
-  )
+  ## Remove new white space
+  text_processed <- stringr::str_trim(string = text_processed)
+  text_processed <- stringr::str_squish(string = text_processed)
 
   # Normalize Case -------------------------------------------------------------
   ## Set everything to lowercase
   text_processed <- tolower(text_processed)
 
-  # Downloading (Second Time) --------------------------------------------------
-  ## Remove elements which contain terms related to downloading files
-  text_processed <- remove_if_detect(
-    input_vector  = text_processed,
-    remove_string = download_vec,
-    location      = "any"
-  )
-
-  # Numbers and Symbols (Third Time) -------------------------------------------
-  ## Drop lines with only numbers or symbols
-  text_processed <- remove_if_detect(
-    input_vector   = text_processed,
-    regex          = regex_letters,
-    logical_method = "inverse"
-  )
-
-  # Break out sentences with multiple hypothesis tags --------------------------
+  # Multiple Hypothesis Tags -------------------------------------------------
+  ##Break out sentences with multiple hypothesis tags
   text_processed = break_out_hypothesis_tags(input.v = text_processed)
 
   # Misc Text Actions ----------------------------------------------------------
@@ -983,11 +1210,6 @@ process_text <- function(text_raw){
     string      = text_processed,
     pattern     = ": :",
     replacement = ":"
-  )
-
-  ## Remove extra white space
-  text_processed <- stringr::str_squish(
-    string = text_processed
   )
 
   ## Replace colon/period instances (: .)
