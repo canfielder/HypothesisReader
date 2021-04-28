@@ -33,3 +33,29 @@ gen_regex <- function(input.str, match){
 #' @noRd
 
 is.not.null <- function(x) !is.null(x)
+
+
+#' Inspect text vector.
+#' 
+#' Outputs useful information for inspecting a character vector.
+#' This is to be used in the testing and debugging of 
+#' text conversion processing.
+#' 
+#' @param input_text input text vector
+#' @param start_index index to start inspection
+#' @param span length of character vector to inspect
+#' @noRd
+
+inspect_text_vector <- function(
+  input_text, 
+  start_index = 100, 
+  span = 20
+  ) {
+  # Print total vector length
+  print(paste("Text Vector Length: ", length(input_text)))
+  cat("\n\n")
+  
+  # Subset character vector
+  end_index = start_index + span - 1
+  input_text[start_index:end_index]
+}
