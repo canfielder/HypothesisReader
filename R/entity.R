@@ -26,6 +26,8 @@ get_path_entity_model <- function() {
 
 load_entity_model <- function() {
   model_entity <- NULL
+  
+  # Load Model
   model_entity <-  tf$keras$models$load_model(get_path_entity_model())
   model_entity
 }
@@ -46,7 +48,7 @@ gen_entity_class <- function(hypothesis) {
   # For R CMD Checks
   model_entity <- X1 <- X2 <- X3 <- NULL
   entity_predict <- NULL
-
+  
   # Convert to Numpy Array
   hypothesis.np <- np$array(hypothesis)
   hypothesis.tf <- tf$convert_to_tensor(hypothesis.np)

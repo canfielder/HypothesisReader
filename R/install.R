@@ -13,6 +13,9 @@
 #' @export
 
 InstallPythonPackages <- function(method = "auto", conda = "auto") {
+  # Set TensorFlow environmental variable to quiet output on start-up
+  Sys.setenv(TF_CPP_MIN_LOG_LEVEL = 3)
+  
   reticulate::py_install("joblib==1.0.0", method = method,
                          conda = conda, pip = TRUE)
 
@@ -28,8 +31,4 @@ InstallPythonPackages <- function(method = "auto", conda = "auto") {
   reticulate::py_install("tensorflow==2.4.0", method = method,
                          conda = conda, pip = TRUE)
   
-  # Set TensorFlow environmental variable to quiet output on start-up
-  Sys.setenv(TF_CPP_MIN_LOG_LEVEL = 3)
-
-
 }
