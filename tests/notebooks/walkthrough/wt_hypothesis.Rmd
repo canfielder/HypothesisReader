@@ -51,7 +51,7 @@ data.frame(pdf_paths) %>%
 ## Process Text
 ```{r}
 # Select Document Index
-index <- 2
+index <- 16
 input_path <- pdf_paths[index]
 
 print(input_path)

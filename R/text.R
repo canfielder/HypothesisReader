@@ -370,7 +370,7 @@ standardize_hypothesis_proposition_no_num <- function(input_vector) {
     mode   = "character",
     length = length(input_vector))
 
-  j = 1
+  j <- 1
 
   # Search for hypothesis in correct format
   for (i in seq_along(input_vector)) {
@@ -395,7 +395,7 @@ standardize_hypothesis_proposition_no_num <- function(input_vector) {
       )
 
       output_vector[i] <- output_string
-      j = j + 1
+      j <- j + 1
 
     } else {
       output_vector[i] <- input.str
@@ -842,31 +842,34 @@ drop_reference_section <- function(input_text){
     yes  = TRUE,
     no   = FALSE
     )
+  
+  output_text <- input_text
 
   ### Drop elements after first acceptable instance of Reference or 
   ### Bibliography is identified. Reference / Bibliography section headers 
   ### in the beginning of the document are ignored.
-  if (any(logical_section)){
+  if (any(logical_section)) {
     
     # Determine all instances of reference section
     ref_indexes <- which(logical_section == TRUE)
     
     # Determine document index after which, reference section is dropped
-    document_length <- length(input_text)
+    document_length <- length(output_text)
     ref_cut_off_percent <- 0.667
     ref_cut_off_index <- round(document_length * ref_cut_off_percent, 0)
     
     # Drop reference section, if it occurs after cut off index
     if (max(ref_indexes) >= ref_cut_off_index) {
+      
       index <- min(ref_indexes[ref_indexes > ref_cut_off_index])
-      
-      input_text[1:index-1]
-      
-  } else {
+      output_text <- output_text[1:index-1]
     
-    input_text
     }
+      
   }
+  
+  output_text
+  
 }
 
 
@@ -1104,8 +1107,11 @@ process_text <- function(text_raw){
   ## Drop line breaks
   ### Trade-off with tokenizing on line break. Dropping all line break vectors
   ### will mean they cannot be used to tokenize
-  text_processed <- text_processed[text_processed != line_break_tag]
-  
+  drop_line_breaks <- TRUE
+  if (drop_line_breaks) {
+    text_processed <- text_processed[text_processed != line_break_tag]
+  }
+    
   # Hyphen Concatenation -------------------------------------------------------
   ## Concatenate adjacent elements if initial element ends With hyphen
   text_processed <- concat_hypen_vector(text_processed)
@@ -1121,6 +1127,16 @@ process_text <- function(text_raw){
   ## Adjust common error traps
   text_processed <- fix_common_error_traps(text_processed)
 
+  # Drop Initial Vector Elements ----------------------------------------------- 
+  ## The front matter of academic paper often has material that could lead to 
+  ## false positive identification of hypotheses. To avoid this, the first n
+  ## lines are dropped.
+  initial_cutoff <- 50
+  if (length(text_processed) > initial_cutoff) {
+    text_length <- length(text_processed)
+    text_processed <-text_processed[initial_cutoff:text_length] 
+  }
+  
   # Standardize Hypothesis/Propositions-----------------------------------------
   ## Hypothesis
   text_processed <- standardize_hypothesis_proposition(
@@ -1172,13 +1188,17 @@ process_text <- function(text_raw){
     unlist()
   
   ## Pass 2 - Tokenizers - Regex (Line break)
+  ### This will not do anything when pre-processing includes dropping all
+  ### line breaks. Check pre-processing above.
   
-  text_processed <- tokenizers::tokenize_regex(
-    text_processed,
-    pattern = line_break_tag
-  ) %>%
-    unlist()
-
+  if (!(drop_line_breaks)) {
+    text_processed <- tokenizers::tokenize_regex(
+      text_processed,
+      pattern = line_break_tag
+    ) %>%
+      unlist()
+  }
+  
   ## Pass 3 - Stringr
   ### Instances of sentences not being correctly tokenized have been seen
   ### using the Tokenizer method. This additional sentence tokenization step

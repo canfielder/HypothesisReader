@@ -45,7 +45,7 @@ data.frame(pdf_paths) %>%
 # TEXT.R
 ## Function: pdf_to_text
 ```{r}
-index = 2
+index = 16
 input_path <- pdf_paths[index]
 print(input_path)
 
@@ -67,9 +67,11 @@ text_processed <- text_raw %>%
 # Output Check
 inspect_text_vector(
   input_text  = text_processed, 
-  start_index = 750, 
+  start_index = 1, 
   span        = 20
 )
+
+text_processed
 ```
 
 ### Italics
@@ -261,8 +263,12 @@ text_processed <- page_line_break_identification(text_processed)
 text_processed <- text_processed[text_processed != "<page_break>"]
 
 ## Drop line breaks
-### Trade-off with tokenizing on line break. Cannot do both
-# text_processed <- text_processed[text_processed != line_break_tag]
+### Trade-off with tokenizing on line break. Dropping all line break vectors
+### will mean they cannot be used to tokenize
+drop_line_breaks <- TRUE
+if (drop_line_breaks) {
+  text_processed <- text_processed[text_processed != line_break_tag]
+}
 
 # Output Check
 inspect_text_vector(
@@ -305,13 +311,78 @@ text_processed <- fix_common_error_traps(text_processed)
 # Output Check
 inspect_text_vector(
   input_text  = text_processed, 
-  start_index = 580, 
+  start_index = 1, 
   span        = 25
 )
 ```
 
+### Drop Initial Vector Elements
+```{r}
+initial_cutoff <- 50
+if (length(text_processed) > initial_cutoff) {
+  text_length <- length(text_processed)
+  text_processed <-text_processed[initial_cutoff:text_length] 
+}
+  
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 1, 
+  span        = 25
+)
+```
+
+
 ### Standardize Hypothesis / Proposition
 #### Hypothtesis - Numbered
+
+```{r}
+input_vector <- text_processed
+  # Initialize
+  output_vector <- vector(
+    mode   = "character",
+    length = length(input_vector))
+
+  j <-  1
+
+  # Search for hypothesis in correct format
+  for (i in seq_along(input_vector)) {
+
+    input.str <- input_vector[i]
+    
+    print(i)
+    print(input.str)
+
+    # Test if hypothesis format is in string
+    detect_hypothesis <- stringr::str_detect(
+      string = input.str,
+      pattern = regex_hypothesis_no_num
+    )
+
+    # If hypothesis is detected, replace with standardized format
+    if (detect_hypothesis) {
+
+      standardized_string <- paste0("<split>hypo ", j, ": ")
+
+      output_string <- stringr::str_replace(
+        string      = input.str,
+        pattern     = regex_hypothesis_no_num,
+        replacement = standardized_string
+      )
+
+      output_vector[i] <- output_string
+      j = j + 1
+
+    } else {
+      output_vector[i] <- input.str
+    }
+  }
+
+  output_vector
+```
+
+
 ```{r}
 ## Hypothesis
 text_processed <- standardize_hypothesis_proposition(
@@ -321,7 +392,7 @@ text_processed <- standardize_hypothesis_proposition(
 # Output Check
 inspect_text_vector(
   input_text  = text_processed, 
-  start_index = 580, 
+  start_index = 1, 
   span        = 25
 )
 ```
@@ -415,7 +486,7 @@ text_processed <- tokenizers::tokenize_sentences(
 # Output Check
 inspect_text_vector(
   input_text  = text_processed, 
-  start_index = 580, 
+  start_index = 100, 
   span        = 25
 )
 ```
@@ -423,16 +494,14 @@ inspect_text_vector(
 
 #### Second Pass (Tokenizers - Linebreak)
 ```{r}
-# text_processed <- stringr::str_c(
-#   text_processed,
-#   collapse = " "
-# )
 
-text_processed <- tokenizers::tokenize_regex(
-  text_processed,
-  pattern = "<line_break>"
+if (!(drop_line_breaks)) {
+  text_processed <- tokenizers::tokenize_regex(
+    text_processed,
+    pattern = line_break_tag
   ) %>%
-  unlist()
+    unlist()
+}
 
 
 # Output Check
