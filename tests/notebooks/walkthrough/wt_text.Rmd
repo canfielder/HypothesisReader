@@ -1,0 +1,513 @@
+---
+title: "Entity Extraction Performance Evaluation - R & Python"
+author: "Evan Canfield"
+date: "12/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Purpose
+The purpose of this notebook is to test how to implement the Entity Extraction model 
+
+# Import
+## Packages
+```{r}
+if (!require(pacman)) {install.packages('pacman')}
+
+p_load(
+  dplyr
+)
+```
+
+## Data
+```{r}
+folder_path <- "./../../../../PDFS/internal/"
+pdf_paths <- list.files(recursive = FALSE, 
+                       path = folder_path, 
+                       pattern = ".pdf", 
+                       full.names = TRUE)
+
+# Format pdf path visualization
+data.frame(pdf_paths) %>% 
+  dplyr::mutate(
+    pdf_paths = stringr::str_remove_all(
+      string = pdf_paths, 
+      pattern = folder_path
+      ),
+    index = dplyr::row_number()
+  ) %>% 
+  dplyr::select(index, pdf_paths)
+```
+
+# TEXT.R
+## Function: pdf_to_text
+```{r}
+index = 2
+input_path <- pdf_paths[index]
+print(input_path)
+
+# Tika
+text_raw <- pdf_to_text(input_path)
+
+# Output Check
+print(paste("Text Vector Characters: ", nchar(text_raw)))
+```
+
+## Function: process_text
+### Vectorize
+```{r}
+## Split text into character vector
+text_processed <- text_raw %>%
+  stringr::str_split(pattern = "\n") %>%
+  unlist()
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 750, 
+  span        = 20
+)
+```
+
+### Italics
+```{r}
+## Fix conversion error in italics text
+text_processed <- fix_italics_conversion_error(text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 955, 
+  span        = 10
+)
+```
+
+### Encoding
+```{r}
+## Fix encoding errors
+text_processed <- fix_encoding_errors(text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 955, 
+  span        = 20
+)
+```
+
+### Tricy Terms - Normalize
+```{r}
+text_processed <- tricky_terms(
+  input_text = text_processed,
+  normalize = TRUE
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 520, 
+  span        = 20
+)
+```
+
+### White Space
+```{r}
+text_processed <- stringr::str_trim(string = text_processed)
+text_processed <- stringr::str_squish(string = text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 520, 
+  span        = 20
+)
+```
+
+### Empty Vector Normalize
+```{r}
+empty_tag <- "<line_break>"
+logical_empty <- text_processed == ""
+
+text_processed <- replace(
+  x = text_processed, 
+  list = logical_empty, 
+  values = empty_tag
+  )
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 520, 
+  span        = 20
+)
+```
+
+### References / Bibliography
+```{r}
+text_processed <- drop_reference_section(text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Numbers and Symbols
+```{r}
+## Drop lines with only numbers or symbols
+text_processed <- remove_if_detect(
+  input_vector   = text_processed,
+  regex          = regex_letters,
+  logical_method = "inverse"
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Drop Vectors With Length 1 or Less
+```{r}
+## Drop elements with length of 1 character
+logical_length <- nchar(text_processed) != 1
+text_processed <- text_processed[logical_length]
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### NA 
+```{r}
+# Drop any NA elements
+text_processed <- text_processed[!is.na(text_processed)]
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Months
+```{r}
+text_processed <- remove_month_vectors(text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Downloading
+```{r}
+## Remove elements which contain text related to downloading documents.
+
+download_vec <- c('This content downloaded','http','jsto', 'JSTOR','DOI','doi', '://')
+
+text_processed <- remove_if_detect(
+  input_vector  = text_processed,
+  remove_string = download_vec,
+  location      = "any"
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### IP Addresses
+```{r}
+## Remove elements which contain IP addresses
+## Identify IP Address
+
+text_processed <- remove_if_detect(
+  input_vector = text_processed,
+  regex        = regex_ip,
+  location     = "any"
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Line / Page Break
+```{r}
+## Identify line and page breaks
+text_processed <- page_line_break_identification(text_processed)
+
+# Drop page breaks
+text_processed <- text_processed[text_processed != "<page_break>"]
+
+## Drop line breaks
+### Trade-off with tokenizing on line break. Cannot do both
+# text_processed <- text_processed[text_processed != line_break_tag]
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Concatenate Hyphens
+```{r}
+## Concatenate Adjacent Elements If Initial Element Ends With Hyphen
+text_processed <- concat_hypen_vector(text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Parentheses
+```{r}
+## Remove text within parentheses
+# text_processed <- remove_text_parens(text_processed)
+#
+## Output Check
+# inspect_text_vector(input_text = text_processed, start_index = 200, span = 20)
+```
+
+### Common Issues
+```{r}
+## Remove Periods From Common Abbreviations
+text_processed <- remove_period_abbr(text_processed)
+
+## Adjust common error traps
+text_processed <- fix_common_error_traps(text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Standardize Hypothesis / Proposition
+#### Hypothtesis - Numbered
+```{r}
+## Hypothesis
+text_processed <- standardize_hypothesis_proposition(
+  input.str = text_processed
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+#### Hypothesis - Non-numbered
+```{r}
+## Test if any hypothesis standardized
+n_hypothesis_test <- sum(
+  stringr::str_count(
+    string = text_processed,
+    pattern = "<split>hypo"
+    )
+  )
+
+## If no hypothesis detected, attempt to standardize hypothesis/proposition
+## formats without number/labels
+if (n_hypothesis_test == 0) {
+  text_processed <- standardize_hypothesis_proposition_no_num(
+    input_vector  = text_processed
+  )
+}
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+#### Duplicate Tags
+```{r}
+## Remove Duplicate Tags
+text_processed <- remove_duplicate_tag(
+  input.str = text_processed
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+#### Remove Trailing Period
+```{r}
+# Remove trailing period for standardized hypothesis tags
+text_processed <- remove_period(
+  input.str = text_processed
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Tricky Terms - Revert
+```{r}
+text_processed <- tricky_terms(
+  input_text = text_processed,
+  normalize = FALSE
+)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Tokenize Sentences
+#### First Pass (Tokenizers - Default)
+```{r}
+## Pass 1 - Tokenizers - Default
+text_processed <- stringr::str_c(
+  text_processed,
+  collapse = " "
+)
+
+text_processed <- tokenizers::tokenize_sentences(
+  text_processed,
+  strip_punct = FALSE) %>%
+  unlist()
+
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+
+#### Second Pass (Tokenizers - Linebreak)
+```{r}
+# text_processed <- stringr::str_c(
+#   text_processed,
+#   collapse = " "
+# )
+
+text_processed <- tokenizers::tokenize_regex(
+  text_processed,
+  pattern = "<line_break>"
+  ) %>%
+  unlist()
+
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+#### Third Pass (Stringr)
+```{r}
+text_processed <- stringr::str_split(
+  string  = text_processed, 
+  pattern = "\\.") %>% 
+  unlist()
+
+## Drop empty vectors
+text_processed <- text_processed[text_processed!=""]
+text_processed <- text_processed[text_processed!=" "]
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Normalize Case 
+```{r}
+## Set everything to lowercase
+text_processed <- tolower(text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Split Sentences with Multiple Hypothesis Tags
+```{r}
+text_processed = break_out_hypothesis_tags(input.v = text_processed)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```
+
+### Misc Text Replacement
+```{r}
+## Replace double colons
+text_processed <- stringr::str_replace_all(
+  string      = text_processed,
+  pattern     = ": :",
+  replacement = ":"
+)
+
+
+## Replace colon/period instances (: .)
+text_processed <- stringr::str_replace_all(
+  string      = text_processed,
+  pattern     = ": \\.",
+  replacement = ":"
+)
+  
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 580, 
+  span        = 25
+)
+```

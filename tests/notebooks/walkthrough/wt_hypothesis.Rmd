@@ -1,0 +1,286 @@
+---
+title: "Walkthrough - Hypothesis Extraction"
+author: "Evan Canfield"
+date: "12/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import
+## Libraries
+```{r import_libraries}
+if (!require(pacman)) {install.packages('pacman')}
+p_load(
+  dplyr
+)
+```
+
+## Assisting Functions
+```{r}
+#' Inspect Text String
+inspect <- function(x, m = 100, span = 20) {
+  n = m + span - 1
+  x[m:n]
+}
+```
+
+## Data
+```{r}
+folder_path <- "./../../../../PDFS/internal/"
+pdf_paths <- list.files(recursive = FALSE, 
+                       path = folder_path, 
+                       pattern = ".pdf", 
+                       full.names = TRUE)
+
+# Format pdf path visualization
+data.frame(pdf_paths) %>% 
+  mutate(
+    pdf_paths = stringr::str_remove_all(
+      string = pdf_paths, 
+      pattern = folder_path
+      ),
+    index = dplyr::row_number()
+  ) %>% 
+  select(index, pdf_paths)
+```
+
+# Preceding Steps
+## Process Text
+```{r}
+# Select Document Index
+index <- 2
+input_path <- pdf_paths[index]
+
+print(input_path)
+
+# Convert PDF to Text
+input_text <- pdf_to_text(input_path)
+
+# Process Text
+text_processed <- process_text(input_text)
+
+# Output Check
+inspect_text_vector(
+  input_text  = text_processed, 
+  start_index = 200, 
+  span        = 20
+)
+```
+
+# Extract Hypothesis
+## Define String Lookup Patterns
+```{r}
+split_tag <- "<split>"
+hypothesis_tag <- "hypo (.*?):\\s*"
+hypothesis_split_tag <- paste(split_tag, hypothesis_tag, sep = "")
+```
+
+## Extract Hypotheses - All
+```{r}
+split_text <- stringr::str_split(
+  string  = text_processed,
+  pattern = split_tag) %>%
+  unlist()
+
+# Select vector elements which contain hypothesis tags
+logical_hypothesis_tag <- stringr::str_detect(
+  string  = split_text,
+  pattern = hypothesis_tag
+)
+
+hypothesis_001 <- split_text[logical_hypothesis_tag]
+hypothesis_001
+```
+
+## Minimum Threshold
+Drop hypothesis statements with too few tokens.
+```{r}
+# Drop Hypothesis lines with hypothesis tag only
+hypothesis_002 <- drop_hypothesis_below_min_threshold(
+  input_text = hypothesis_001
+  )
+
+hypothesis_002
+```
+
+## Filter vector elements based on hypothesis prediction model
+```{r}
+apply_model = FALSE
+if (apply_model) {
+  if (!(purrr::is_empty(hypothesis_002))) {
+    
+    hypothesis_003 <- apply_fasttext_model(hypothesis_002)
+    
+  } else {
+    hypothesis_003 <- hypothesis_002
+  }
+} else {
+  hypothesis_003 <- hypothesis_002
+}
+
+hypothesis_003
+```
+
+
+## Apply fastText Model
+### Walkthrough
+#### Drop Hypothesis Tag
+```{r}
+model_input <- gen_fasttext_model_input(hypothesis_002)
+model_input
+```
+
+#### Create Predictions
+```{r}
+
+if (!(purrr::is_empty(model_input))) {
+  hypothesis_pred <- fastTextR::ft_predict(
+    model   = ft_model,
+    newdata = model_input,
+    rval    = "dense"
+  ) %>%
+    as.data.frame() 
+  
+  # Rename columns
+  col_names <- names(hypothesis_pred)
+  
+  if ("__label__1" %in% col_names) {
+    hypothesis_pred <- hypothesis_pred %>%
+      dplyr::rename(yes = "__label__1")
+  }
+  
+  if ("__label__0" %in% col_names) {
+    hypothesis_pred <- hypothesis_pred %>%
+      dplyr::rename(no = "__label__0")
+  }
+  
+  hypothesis_pred
+} else {
+  print("Input not detected.")
+}
+  
+```
+
+#### Generate Logical Vector 
+```{r}
+if (!(purrr::is_empty(model_input))) {
+  col_names <- names(hypothesis_pred)
+  
+  ## If no column not found, all elements are hypothesis
+  if (!("no" %in% col_names)) {
+    response <- vector(
+      mode   = "logical",
+      length = length(model_input)
+    )
+  
+    for (i in seq_along(model_input)) (response[i] <- TRUE)
+  
+    ## If yes column not found, all elements are not hypothesis
+  } else if (!("yes" %in% col_names)) {
+    response <- vector(
+      mode   = "logical",
+      length = length(model_input))
+  
+    for (i in seq_along(model_input)) (response[i] <- FALSE)
+  
+  } else {
+    response <- hypothesis_pred %>%
+      dplyr::mutate(
+        Response = dplyr::if_else(
+          condition = yes >= no,
+          true      = TRUE,
+          false     = FALSE
+        )
+      ) %>%
+      dplyr::pull(Response)
+  
+  }
+  
+  response
+  
+} else {
+  print("Input not detected.")
+}
+```
+
+#### Filter Hypothesis Statements with Logical Vector
+```{r}
+# hypothesis_003 <- hypothesis_002[response]
+# hypothesis_003
+```
+
+## Hypothesis Sanity Check
+Remove hypothesis statements with numbers that don't pass sanity check.
+```{r}
+hypothesis_004 <- hypothesis_sanity_check(hypothesis_003)
+hypothesis_004
+```
+## Possible Hypothesis Labels
+### Extract Hypothesis number/label
+```{r}
+# Identify lines with hypothesis pattern
+h_match <- hypothesis_004 %>%
+  stringr::str_match(
+    pattern = hypothesis_tag
+  )
+
+h_match_num <- h_match[,2]
+
+h_match_num
+```
+
+### Identify all unique hypothesis number/labels
+```{r}
+# Identify unique hypothesis numbers
+h_match_num_unq <- unique(h_match_num)
+h_match_num_unq
+```
+
+### Remove NA
+```{r}
+# Remove known erroneous hypothesis formats (i.e.: NA)
+error_hypothesis <- c("na")
+
+h_match_num_unq <- setdiff(h_match_num_unq, error_hypothesis)
+
+# Drop NA
+h_match_num_unq <- h_match_num_unq[!is.na(h_match_num_unq)]
+
+h_match_num_unq
+```
+
+## Acceptable Hypothesis Labels
+```{r}
+h_labels <- acceptable_hypothesis_labels(h_match_num_unq)
+h_labels
+```
+
+## Initial Hypthesis Instance
+```{r}
+# Determine vector index of initial hypothesis statements
+h_initial <- c()
+
+for (i in h_labels){
+  intial_idx <- tapply(seq_along(h_match_num),
+                       h_match_num,
+                       min)[i]
+  h_initial <- c(h_initial, intial_idx)
+}
+
+
+# Reduce text to only initial hypothesis instances
+hypothesis_005 <- hypothesis_004[h_initial]
+hypothesis_005
+```
+
+## Output Table
+```{r}
+df_hypothesis <- hypothesis_output_table(hypothesis_005)
+df_hypothesis
+```
+
+
+
