@@ -37,7 +37,7 @@ The following is for the quick set-up and installation of the R package. Further
 ```
 devtools::install_github("canfielder/HypothesisReader")
 ```
-2. Install [**rtika**](https://github.com/ropensci/rtika) package from GitHub repository. The package [**rtika**](https://github.com/ropensci/rtika) is a dependent package for **HypothesisReader** and must be installed before the package can be used.
+2. Install [**rtika**](https://github.com/ropensci/rtika) package from GitHub repository.
 ```
 devtools::install_github("ropensci/rtika"")
 ```
@@ -69,11 +69,18 @@ The [devtools](https://www.rdocumentation.org/packages/devtools) package can be 
 install.packages(“devtools”)
 ```
 
-## Installing HypothesisReader
+## Installing R Packages 
+### HypothesisReader
 With [devtools](https://www.rdocumentation.org/packages/devtools) installed, the **HypothesisReader** package can be installed by executing the following:
 
 ```
 devtools::install_github("canfielder/HypothesisReader")
+```
+
+### rtika
+Install [**rtika**](https://github.com/ropensci/rtika) package from GitHub repository. The package [**rtika**](https://github.com/ropensci/rtika) is a dependent package for **HypothesisReader** and must be installed before the package can be used.
+```
+devtools::install_github("ropensci/rtika"")
 ```
 
 ## Configure Python Environment
