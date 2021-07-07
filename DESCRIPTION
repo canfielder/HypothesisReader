@@ -47,5 +47,8 @@ Imports:
     tokenizers,
     vroom,
     rtika
+Remotes: 
+  github::ropensci/rtika
+
 Depends: 
     R (>= 2.10)
