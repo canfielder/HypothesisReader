@@ -33,17 +33,21 @@ The following is for the quick set-up and installation of the R package. Further
 
 ### Installation/ Set-Up
 
-1. Install R package from GitHub repository
+1. Install **HypothesisReader** package from GitHub repository.
 ```
-devtools::canfielder/HypothesisReader
+devtools::install_github("canfielder/HypothesisReader")
 ```
-2.	Execute function below and attempt to process a PDF file. The initial processing of a PDF will prompt Python installation.
+2. Install [**rtika**](https://github.com/ropensci/rtika) package from GitHub repository. The package [**rtika**](https://github.com/ropensci/rtika) is a dependent package for **HypothesisReader** and must be installed before the package can be used.
+```
+devtools::install_github("ropensci/rtika"")
+```
+3.	Execute function below and attempt to process a PDF file. The initial processing of a PDF will prompt Python installation.
 ```
 HypothesisReader::LaunchApp()
 ```
-3. At the prompt in the console, select _**y**_ to install Miniconda.
-4. Restart R session (Session > Restart).
-5. Package is now ready for use.
+4. At the prompt in the console, select _**y**_ to install Miniconda.
+5. Restart R session (Session > Restart).
+6. Package is now ready for use.
 
 ### Troubleshooting
 1. If all of the required Python packages do not automatically install (which would yield an error), installation can be forced with the following function:

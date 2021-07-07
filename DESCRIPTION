@@ -1,6 +1,6 @@
 Package: HypothesisReader
 Title: Hypothesis Extraction and Analysis for Scholarly Papers in Social Sciences
-Version: 0.0.5.510
+Version: 0.0.6.1
 Authors@R: 
     person(given = "Evan",
            family = "Canfield",
@@ -49,6 +49,5 @@ Imports:
     rtika
 Remotes: 
   github::ropensci/rtika
-
 Depends: 
     R (>= 2.10)
