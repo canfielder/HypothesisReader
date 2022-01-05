@@ -430,7 +430,7 @@ Zolotov, V., &; Kung, D. (2017). Analysis and optimization of **fastText** linea
 
 # Appendix 1: Relationship Deconstruction Model Structure
 
-![](./appendix/appendix_1_nn_architecture.svg)
+![](./appendix/appendix_1_nn_architecture.png)
 
 -------------------------------------------------------------------------------
 
